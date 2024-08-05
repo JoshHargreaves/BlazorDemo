@@ -1,0 +1,125 @@
+﻿@page "/movies"
+@inject HttpClient Http
+@inject ILogger<Movies> Logger
+
+<PageTitle>Movies</PageTitle>
+
+<h1>Movies</h1>
+
+<p>This component demonstrates fetching data from an API.</p>
+
+@if (_movies == null)
+{
+    <p>
+        <em>Loading...</em>
+    </p>
+}
+else
+{
+    <div class="form-group">
+        <input class="form-control" type="text" placeholder="Filter..."
+               @bind="Filter"
+               @bind:event="oninput">
+    </div>
+    <table class="table table-striped">
+        <thead class="thead-light">
+        <tr>
+            <th scope="col">Title</th>
+            <th scope="col">Overview</th>
+            <th scope="col">Popularity</th>
+        </tr>
+        </thead>
+        <tbody>
+        @if (_movies.Any())
+        {
+            foreach (var movie in _movies.Where(IsVisible))
+            {
+                <tr>
+                    <td>@movie.Title</td>
+                    <td>@movie.Overview</td>
+                    <td>@movie.Popularity</td>
+                </tr>
+            }
+        }
+        else
+        {
+            <tr>
+                <td colspan="3">No movies found.</td>
+            </tr>
+        }
+        </tbody>
+    </table>
+}
+
+@code {
+    private Movie[]? _movies;
+    private string? Filter { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await FetchMovies();
+    }
+
+    private bool IsVisible(Movie movie)
+    {
+        if (string.IsNullOrWhiteSpace(Filter))
+            return true;
+
+        var filter = Filter.Trim().ToLowerInvariant();
+        return movie.Title.ToLower().Contains(filter) || movie.Overview.ToLower().Contains(filter);
+    }
+
+    private async Task FetchMovies()
+    {
+        try
+        {
+            var request = new HttpRequestMessage
+            {
+                Method = HttpMethod.Get,
+                RequestUri = new Uri("https://api.themoviedb.org/3/discover/movie?include_adult=false&include_video=false&language=en-US&page=1&sort_by=popularity.desc"),
+                Headers =
+                {
+                    { "accept", "application/json" },
+                    { "Authorization", "Bearer YOUR_ACCESS_TOKEN" }, // Replace with your token
+                },
+            };
+
+            using var response = await Http.SendAsync(request);
+            response.EnsureSuccessStatusCode();
+
+            var root = await response.Content.ReadFromJsonAsync<Root>();
+            _movies = root?.Results ?? Array.Empty<Movie>();
+        }
+        catch (HttpRequestException httpEx)
+        {
+            Logger.LogError(httpEx, "HTTP request error.");
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "An error occurred.");
+        }
+        finally
+        {
+            StateHasChanged();
+        }
+    }
+    
+    public class Root
+    {
+        public Movie[]? Results { get; set; }
+    }
+
+    public class Movie
+    {
+        public Movie(string title, string overview, double popularity)
+        {
+            Title = title;
+            Overview = overview;
+            Popularity = popularity;
+        }
+
+        public string Title { get; set; }
+        public string Overview { get; set; }
+        public double Popularity { get; set; }
+    }
+}
